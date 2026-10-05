@@ -176,6 +176,10 @@ func _test_event() -> void:
 	_check(
 		"event codes are sent", second["event_id"] == 4200 and second["session_sequence_index"] == 1
 	)
+	_check(
+		"event codes from the standard",
+		OGDEvents.PlayerAction.POINT_AND_CLICK_SELECT_OBJECT == 4200
+	)
 	_check("empty event data is {}", second["event_data"] == "{}")
 	_check(
 		"cleared context is left out", not second.has("game_state") and second.has("game_segment")

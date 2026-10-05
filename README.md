@@ -30,11 +30,13 @@ OGDLog.initialize("MY_GAME", "1.2.0")
 
 ```gdscript
 OGDLog.log("open_map")
-OGDLog.log_event(4200, "select_crate", {"crate": 3})
+OGDLog.log_event(OGDEvents.PlayerAction.POINT_AND_CLICK_SELECT_OBJECT, "select_crate", {"crate": 3})
 ```
 
-`log_event` takes the event's code from the OGD event standard first. Game-specific events can use a code from the
-`X900`-`X999` range of any block, or from the `9000` block. Events logged with `log` are sent with an `event_id` of `0`.
+`log_event` takes the event's code from the OGD event standard first. `OGDEvents` has every code in the standard, with
+one enum per category. It's generated from the standard in ogd-standards, so don't edit `ogd_events.gd` by hand.
+Game-specific events can use a code from the `X900`-`X999` range of any block, or from the `9000` block. Events logged
+with `log` are sent with an `event_id` of `0`.
 Event data is a Dictionary, and is sent as JSON.
 
 ### Game State and Other Context
