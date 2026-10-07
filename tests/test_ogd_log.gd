@@ -10,7 +10,6 @@ const EVENT_FIELDS := [
 	"event_name",
 	"session_sequence_index",
 	"timestamp",
-	"client_offset",
 	"event_id",
 	"game_time",
 	"event_data",
@@ -85,19 +84,19 @@ func _test_json() -> void:
 
 func _test_offset() -> void:
 	var cases := {
-		-210: "-03:30:00",
-		330: "05:30:00",
-		-300: "-05:00:00",
-		0: "00:00:00",
-		345: "05:45:00",
-		-570: "-09:30:00",
-		840: "14:00:00",
+		-210: "-03:30",
+		330: "+05:30",
+		-300: "-05:00",
+		0: "Z",
+		345: "+05:45",
+		-570: "-09:30",
+		840: "+14:00",
 	}
 	for minutes in cases:
 		_check("offset %d minutes" % minutes, LOGGER._format_offset(minutes) == cases[minutes])
 	# CI runs the tests in this zone, where Time.get_time_zone_from_system() gets the offset wrong
 	if OS.get_environment("TZ") == "Pacific/Marquesas":
-		_check("client offset in a -09:30 zone", LOGGER._client_offset() == "-09:30:00")
+		_check("timestamp offset in a -09:30 zone", LOGGER._timestamp().ends_with("-09:30"))
 
 
 func _test_session_and_timestamp() -> void:
@@ -108,10 +107,22 @@ func _test_session_and_timestamp() -> void:
 	_check("session id has 17 digits", session.length() == 17, session)
 	_check("session id starts with today's date", session.begins_with(date), session)
 	var timestamp: String = LOGGER._timestamp()
-	var pattern := RegEx.create_from_string("^\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$")
+	var pattern := RegEx.create_from_string(
+		"^\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d\\.\\d{3}(Z|[+-]\\d\\d:\\d\\d)$"
+	)
 	_check("timestamp format", pattern.search(timestamp) != null, timestamp)
-	var parsed := Time.get_unix_time_from_datetime_string(timestamp.substr(0, 19).replace(" ", "T"))
-	_check("timestamp is UTC", absf(parsed - Time.get_unix_time_from_system()) < 2.0)
+	var offset := 0
+	if not timestamp.ends_with("Z"):
+		var direction := -1 if timestamp[23] == "-" else 1
+		offset = direction * (int(timestamp.substr(24, 2)) * 60 + int(timestamp.substr(27, 2)))
+	var wall := Time.get_unix_time_from_datetime_string(timestamp.substr(0, 19).replace(" ", "T"))
+	_check(
+		"timestamp minus its offset is the current time",
+		absf(wall - offset * 60 - Time.get_unix_time_from_system()) < 2.0,
+		timestamp
+	)
+	var local := Time.get_unix_time_from_datetime_dict(Time.get_datetime_dict_from_system())
+	_check("timestamp is local wall time", absf(wall - local) < 2.0, timestamp)
 	logger.free()
 
 
@@ -120,18 +131,37 @@ func _test_query() -> void:
 	logger.initialize("wake", "1.2.3 beta/x", 5, "research b")
 	logger.set_user_id("u 1")
 	logger.set_instance_id("inst&1")
+	logger.set_player_history({"sessions": 2})
+	logger.set_game_configuration({"hard_mode": true})
+	var platform: String = logger._session_context["platform"]
 	var expected := (
 		"?game_id=WAKE&log_version=5&game_version=1.2.3%20beta%2Fx&source_version=1.2.3%20beta%2Fx"
 		+ "&schema_version=1.0-alpha&session_id="
 		+ str(logger.get_session_id())
-		+ "&app_branch=research%20b&player_id=u%201&instance_id=inst%261"
+		+ "&condition=research%20b&player_id=u%201&instance_id=inst%261"
+		+ "&game_configuration=%7B%22hard_mode%22%3Atrue%7D&platform="
+		+ platform.uri_encode()
+		+ "&player_history=%7B%22sessions%22%3A2%7D"
 	)
 	_check("query string", logger._query == expected, logger._query)
+	_check(
+		"platform has os, device and engine",
+		JSON.parse_string(platform).keys() == ["os", "device", "engine"],
+		platform
+	)
 	logger.set_user_id("")
 	logger.set_instance_id("")
+	logger.set_player_history({})
+	logger.set_game_configuration({})
 	_check(
-		"cleared ids are left out",
-		not "player_id" in logger._query and not "instance_id" in logger._query
+		"cleared ids and context are left out",
+		(
+			not "player_id" in logger._query
+			and not "instance_id" in logger._query
+			and not "player_history" in logger._query
+			and not "game_configuration" in logger._query
+		),
+		logger._query
 	)
 	logger.free()
 
@@ -154,13 +184,11 @@ func _test_event() -> void:
 	var first: Dictionary = JSON.parse_string(logger._queue[0]["json"])
 	var second: Dictionary = JSON.parse_string(logger._queue[1]["json"])
 	var expected_context := {
-		"player_history": '{"sessions":2}',
 		"game_state": '{"money":5}',
 		"game_segment": '{"level":"reef-3"}',
-		"game_configuration": '{"hard_mode":true}',
 		"private_metadata": '{"class":"b"}',
 	}
-	var fields := EVENT_FIELDS + expected_context.keys() + ["platform"]
+	var fields := EVENT_FIELDS + expected_context.keys()
 	_check("fields in Unity's order", first.keys() == fields, str(first.keys()))
 	_check(
 		"name-only events send event_id 0",
@@ -183,12 +211,6 @@ func _test_event() -> void:
 	_check("empty event data is {}", second["event_data"] == "{}")
 	_check(
 		"cleared context is left out", not second.has("game_state") and second.has("game_segment")
-	)
-	var platform: Dictionary = JSON.parse_string(second["platform"])
-	_check(
-		"platform has os, device and engine",
-		platform.keys() == ["os", "device", "engine"],
-		str(platform)
 	)
 	logger.free()
 

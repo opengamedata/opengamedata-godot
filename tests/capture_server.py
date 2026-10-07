@@ -14,14 +14,15 @@ import re
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List
 from urllib.parse import parse_qs, urlsplit
 
-TIMESTAMP : re.Pattern = re.compile(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}Z")
-OFFSET    : re.Pattern = re.compile(r"-?\d\d:[0-5]\d:00")
-FIELDS    : List[str]  = ["event_name", "session_sequence_index", "timestamp", "client_offset", "event_id", "game_time", "event_data"]
-CONTEXT   : List[str]  = ["player_history", "game_state", "game_segment", "game_configuration", "private_metadata", "platform"]
+TIMESTAMP     : re.Pattern = re.compile(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}(Z|[+-]\d\d:[0-5]\d)")
+FIELDS        : List[str]  = ["event_name", "session_sequence_index", "timestamp", "event_id", "game_time", "event_data"]
+CONTEXT       : List[str]  = ["game_state", "game_segment", "private_metadata"]
+QUERY_CONTEXT : List[str]  = ["game_configuration", "platform", "player_history"]
 
 _lock  : threading.Lock = threading.Lock()
 _state : Dict[str, Any] = {}
@@ -56,6 +57,11 @@ def _checkRequest(query:Dict[str, List[str]], content_type:str, body:bytes) -> L
         raise ValueError("source_version doesn't match game_version")
     if not re.fullmatch(r"\d{17}", params.get("session_id", "")) or not re.fullmatch(r"\d+", params.get("log_version", "")):
         raise ValueError(f"bad session_id or log_version in {params}")
+    if "app_branch" in params or "platform" not in params:
+        raise ValueError(f"app_branch sent, or platform missing, in {params}")
+    for key in QUERY_CONTEXT:
+        if key in params and not isinstance(json.loads(params[key], parse_constant=_rejectConstant), dict):
+            raise ValueError(f"{key} isn't a JSON object: {params[key]}")
 
     form = parse_qs(body.decode("ascii"), strict_parsing=True)
     if list(form.keys()) != ["data"] or len(form["data"]) != 1:
@@ -69,8 +75,12 @@ def _checkRequest(query:Dict[str, List[str]], content_type:str, body:bytes) -> L
             raise ValueError(f"unexpected fields or order: {keys}")
         if keys[len(FIELDS):] != [key for key in CONTEXT if key in keys]:
             raise ValueError(f"context fields out of order: {keys}")
-        if not TIMESTAMP.fullmatch(event["timestamp"]) or not OFFSET.fullmatch(event["client_offset"]):
-            raise ValueError(f"bad timestamp or client_offset: {event}")
+        if not TIMESTAMP.fullmatch(event["timestamp"]) or event["timestamp"].endswith(("+00:00", "-00:00")):
+            raise ValueError(f"bad timestamp: {event}")
+        # local time minus its offset has to be the current UTC time
+        sent = datetime.fromisoformat(event["timestamp"].replace("Z", "+00:00"))
+        if abs((sent - datetime.now(timezone.utc)).total_seconds()) > 60:
+            raise ValueError(f"timestamp isn't the current time: {event}")
         if type(event["session_sequence_index"]) is not int or type(event["event_id"]) is not int:
             raise ValueError(f"session_sequence_index and event_id must be ints: {event}")
         if type(event["game_time"]) not in (int, float) or event["game_time"] < 0:

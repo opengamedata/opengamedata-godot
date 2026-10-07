@@ -27,7 +27,7 @@ static var _control_characters := RegEx.create_from_string("[\\x01-\\x1f]")
 var _app_id := ""
 var _app_version := ""
 var _log_version := 0
-var _app_branch := ""
+var _condition := ""
 var _endpoint := DEFAULT_ENDPOINT
 var _debug := false
 
@@ -37,12 +37,15 @@ var _event_sequence := 0
 var _user_id := ""
 var _instance_id := ""
 var _query := ""
-var _platform := ""
-var _context := {
+# context that shouldn't change during a session goes in the query string, the rest with each event
+var _session_context := {
+	"game_configuration": "",
+	"platform": "",
 	"player_history": "",
+}
+var _context := {
 	"game_state": "",
 	"game_segment": "",
-	"game_configuration": "",
 	"private_metadata": "",
 }
 
@@ -61,7 +64,7 @@ var _rng := RandomNumberGenerator.new()
 
 func _init() -> void:
 	_rng.randomize()
-	_platform = _to_json(
+	_session_context["platform"] = _to_json(
 		{
 			"os": (OS.get_name() + " " + OS.get_version()).strip_edges(),
 			"device": OS.get_model_name(),
@@ -106,11 +109,11 @@ func _notification(what: int) -> void:
 
 
 ## Sets the game's id and version. Call this once before logging any events.
-func initialize(app_id: String, app_version: String, log_version := 0, app_branch := "") -> void:
+func initialize(app_id: String, app_version: String, log_version := 0, condition := "") -> void:
 	_app_id = app_id
 	_app_version = app_version
 	_log_version = log_version
-	_app_branch = app_branch
+	_condition = condition
 	_refresh_query()
 
 
@@ -137,9 +140,9 @@ func set_instance_id(instance_id: String) -> void:
 	_refresh_query()
 
 
-## Sets the player history sent with every event. An empty Dictionary clears it.
+## Sets the player history, sent once per request. An empty Dictionary clears it.
 func set_player_history(player_history: Dictionary) -> void:
-	_set_context("player_history", player_history)
+	_set_session_context("player_history", player_history)
 
 
 ## Sets the game state sent with every event. An empty Dictionary clears it.
@@ -153,9 +156,9 @@ func set_game_segment(game_segment: Dictionary) -> void:
 	_set_context("game_segment", game_segment)
 
 
-## Sets the game configuration sent with every event. An empty Dictionary clears it.
+## Sets the game configuration, sent once per request. An empty Dictionary clears it.
 func set_game_configuration(game_configuration: Dictionary) -> void:
-	_set_context("game_configuration", game_configuration)
+	_set_session_context("game_configuration", game_configuration)
 
 
 ## Sets private metadata sent with every event. An empty Dictionary clears it.
@@ -191,7 +194,6 @@ func log_event(event_id: int, event_name: String, event_data := {}) -> void:
 		"event_name": event_name,
 		"session_sequence_index": _event_sequence,
 		"timestamp": _timestamp(),
-		"client_offset": _client_offset(),
 		"event_id": event_id,
 		"game_time": snappedf((Time.get_ticks_usec() - _session_start_usec) / 1000000.0, 0.001),
 		"event_data": _to_json(event_data),
@@ -200,7 +202,6 @@ func log_event(event_id: int, event_name: String, event_data := {}) -> void:
 	for field in _context:
 		if not _context[field].is_empty():
 			event[field] = _context[field]
-	event["platform"] = _platform
 
 	_queue.append({"query": _query, "json": _to_json(event)})
 	if not _sending and _next_flush_msec < 0:
@@ -293,16 +294,24 @@ func _refresh_query() -> void:
 	_query += "&source_version=" + _app_version.uri_encode()
 	_query += "&schema_version=1.0-alpha"
 	_query += "&session_id=" + str(_session_id)
-	if not _app_branch.is_empty():
-		_query += "&app_branch=" + _app_branch.uri_encode()
+	if not _condition.is_empty():
+		_query += "&condition=" + _condition.uri_encode()
 	if not _user_id.is_empty():
 		_query += "&player_id=" + _user_id.uri_encode()
 	if not _instance_id.is_empty():
 		_query += "&instance_id=" + _instance_id.uri_encode()
+	for field in _session_context:
+		if not _session_context[field].is_empty():
+			_query += "&" + field + "=" + _session_context[field].uri_encode()
 
 
 func _set_context(field: String, value: Dictionary) -> void:
 	_context[field] = "" if value.is_empty() else _to_json(value)
+
+
+func _set_session_context(field: String, value: Dictionary) -> void:
+	_session_context[field] = "" if value.is_empty() else _to_json(value)
+	_refresh_query()
 
 
 func _new_session_id() -> int:
@@ -314,24 +323,30 @@ func _new_session_id() -> int:
 	return int(date + "%05d" % _rng.randi_range(0, 99999))
 
 
+# local time with its offset from UTC, e.g. 2026-10-06 18:55:00.123-05:00
 static func _timestamp() -> String:
 	var now := Time.get_unix_time_from_system()
 	var seconds := floori(now)
 	var msec := mini(floori((now - seconds) * 1000.0), 999)
-	return Time.get_datetime_string_from_unix_time(seconds, true) + ".%03dZ" % msec
+	var offset := _utc_offset()
+	var local := Time.get_datetime_string_from_unix_time(seconds + offset * 60, true)
+	return local + ".%03d" % msec + _format_offset(offset)
 
 
-# compares local and UTC time, since Time.get_time_zone_from_system() is wrong for -HH:30 zones
-static func _client_offset() -> String:
+# the offset from UTC in minutes, found by comparing local and UTC time, since
+# Time.get_time_zone_from_system() is wrong for -HH:30 zones
+static func _utc_offset() -> int:
 	var local := Time.get_unix_time_from_datetime_dict(Time.get_datetime_dict_from_system())
 	var utc := Time.get_unix_time_from_datetime_dict(Time.get_datetime_dict_from_system(true))
-	return _format_offset(roundi((local - utc) / 60.0))
+	return roundi((local - utc) / 60.0)
 
 
 static func _format_offset(minutes: int) -> String:
-	var prefix := "-" if minutes < 0 else ""
+	if minutes == 0:
+		return "Z"
+	var prefix := "-" if minutes < 0 else "+"
 	minutes = absi(minutes)
-	return "%s%02d:%02d:00" % [prefix, floori(minutes / 60.0), minutes % 60]
+	return "%s%02d:%02d" % [prefix, floori(minutes / 60.0), minutes % 60]
 
 
 # JSON.stringify sorts keys and writes some control characters as invalid JSON

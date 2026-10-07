@@ -24,7 +24,8 @@ OGDLog.initialize("MY_GAME", "1.2.0")
 - `app_id`: the game's id in the database (ex. "AQUALAB")
 - `app_version`: the current version of the game
 - `log_version` (optional): the version of the game's logging, as an int. Defaults to 0.
-- `app_branch` (optional): the branch of the game, for games running more than one version at once
+- `condition` (optional): the experimental condition this copy of the game is in, such as an A/B test group, or the
+  branch for games running more than one version at once
 
 ### Events
 
@@ -41,7 +42,10 @@ Event data is a Dictionary, and is sent as JSON.
 
 ### Game State and Other Context
 
-These are attached to every event until they change. Each takes a Dictionary, and an empty Dictionary clears it.
+Each of these takes a Dictionary and is sent until it changes, and an empty Dictionary clears it. Game state, game
+segment and private metadata are attached to every event. Player history and game configuration shouldn't change
+during a session, so they're sent once per request, along with the platform (OS, device and Godot version), instead
+of with each event. They go in the URL, so keep them small.
 
 ```gdscript
 OGDLog.set_game_state({"money": 120})
@@ -55,8 +59,8 @@ OGDLog.set_private_metadata({"classroom": "7b"})
 
 A session starts when the game starts. `OGDLog.reset_session_id()` starts a new one, with a new session id, and the
 sequence index and game time starting from 0 again. `OGDLog.set_user_id(id)` and `OGDLog.set_instance_id(id)` are
-sent with every event logged after they're set. Events already waiting to be sent keep the session and ids they were
-logged with.
+sent with every event logged after they're set. Events already waiting to be sent keep the session, ids, player history
+and game configuration they were logged with.
 
 ### Sending
 
@@ -74,7 +78,7 @@ This addon only sends the v1.0 event schema, as `schema_version=1.0-alpha`. The 
 v1.0 yet, so until it does, point the logger at the testing endpoint:
 
 ```gdscript
-OGDLog.set_endpoint("https://t-v3-t---ogd-api-logger-test-3rlcoyes6a-uc.a.run.app/log.php")
+OGDLog.set_endpoint("https://t-main-t---ogd-api-logger-test-3rlcoyes6a-uc.a.run.app/log.php")
 ```
 
 Use the endpoint's final URL. The logger doesn't follow redirects, and in web exports, where the browser follows them
