@@ -36,8 +36,8 @@ OGDLog.log_event(OGDEvents.PlayerAction.POINT_AND_CLICK_SELECT_OBJECT, "select_c
 
 `log_event` takes the event's code from the OGD event standard first. `OGDEvents` has every code in the standard, with
 one enum per category. It's generated from the standard in ogd-standards, so don't edit `ogd_events.gd` by hand.
-Game-specific events can use a code from the `X900`-`X999` range of any block, or from the `9000` block. Events logged
-with `log` are sent with an `event_id` of `0`.
+Game-specific events can use a code from the `X900`-`X999` range of any block, or from the `9000` block other than
+`9999`. Events logged with `log` are sent with an `event_id` of `9999`, the standard's code for an event without one.
 Event data is a Dictionary, and is sent as JSON.
 
 ### Game State and Other Context

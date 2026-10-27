@@ -189,8 +189,8 @@ func _test_event() -> void:
 	var fields := EVENT_FIELDS + expected_context.keys()
 	_check("fields in Unity's order", first.keys() == fields, str(first.keys()))
 	_check(
-		"name-only events send event_id 0",
-		first["event_id"] == 0 and first["event_data"] == '{"a":1}'
+		"name-only events send event_id 9999",
+		first["event_id"] == 9999 and first["event_data"] == '{"a":1}'
 	)
 	var context := {}
 	for field in expected_context:

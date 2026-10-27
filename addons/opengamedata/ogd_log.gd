@@ -173,9 +173,10 @@ func get_session_id() -> int:
 	return _session_id
 
 
-## Logs an event without an event code, so it's sent with an event_id of 0.
+## Logs an event without an event code, so it's sent with an event_id of 9999, the standard's code
+## for an event without one.
 func log(event_name: String, event_data := {}) -> void:
-	log_event(0, event_name, event_data)
+	log_event(9999, event_name, event_data)
 
 
 ## Logs an event with its code from the OGD event standard.
