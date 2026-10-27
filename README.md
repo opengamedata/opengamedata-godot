@@ -43,9 +43,10 @@ Event data is a Dictionary, and is sent as JSON.
 ### Game State and Other Context
 
 Each of these takes a Dictionary and is sent until it changes, and an empty Dictionary clears it. Game state and game
-segment are attached to every event. Player history and game configuration shouldn't change
-during a session, so they're sent once per request, along with the platform (OS, device and Godot version), instead
-of with each event. They go in the URL, so keep them small.
+segment are attached to every event. Player history and game configuration shouldn't change during a session, so
+they're sent once per request, along with the platform (OS, device and Godot version), instead of with each event.
+Like the other session fields, they're sent as form fields in the POST body, which is where `log.php` reads them. Only
+`game_id` and `schema_version` go in the URL.
 
 ```gdscript
 OGDLog.set_game_state({"money": 120})

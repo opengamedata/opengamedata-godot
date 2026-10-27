@@ -36,8 +36,11 @@ var _session_start_usec := 0
 var _event_sequence := 0
 var _user_id := ""
 var _instance_id := ""
+# log.php reads game_id and schema_version from the url, and the other session fields from the POST
+# body, where they go ahead of the events
 var _query := ""
-# context that shouldn't change during a session goes in the query string, the rest with each event
+var _session_params := ""
+# context that shouldn't change during a session is sent once per request, the rest with each event
 var _session_context := {
 	"game_configuration": "",
 	"platform": "",
@@ -48,7 +51,7 @@ var _context := {
 	"game_segment": "",
 }
 
-# each event keeps the query string it was logged with, so a later reset doesn't relabel it
+# each event keeps the session fields it was logged with, so a later reset doesn't relabel it
 var _queue: Array[Dictionary] = []
 var _batch_size := 0
 var _sending := false
@@ -113,7 +116,7 @@ func initialize(app_id: String, app_version: String, log_version := 0, condition
 	_app_version = app_version
 	_log_version = log_version
 	_condition = condition
-	_refresh_query()
+	_refresh_session_fields()
 
 
 ## Sends events to a different log.php, such as a testing endpoint.
@@ -130,13 +133,13 @@ func set_debug(enabled: bool) -> void:
 ## Sets the player id sent with every event. An empty string clears it.
 func set_user_id(user_id: String) -> void:
 	_user_id = user_id
-	_refresh_query()
+	_refresh_session_fields()
 
 
 ## Sets the instance id sent with every event. An empty string clears it.
 func set_instance_id(instance_id: String) -> void:
 	_instance_id = instance_id
-	_refresh_query()
+	_refresh_session_fields()
 
 
 ## Sets the player history, sent once per request. An empty Dictionary clears it.
@@ -165,7 +168,7 @@ func reset_session_id() -> void:
 	_session_id = _new_session_id()
 	_session_start_usec = Time.get_ticks_usec()
 	_event_sequence = 0
-	_refresh_query()
+	_refresh_session_fields()
 
 
 ## Returns the current session id.
@@ -198,7 +201,7 @@ func log_event(event_id: int, event_name: String, event_data := {}) -> void:
 		if not _context[field].is_empty():
 			event[field] = _context[field]
 
-	_queue.append({"query": _query, "json": _to_json(event)})
+	_queue.append({"query": _query, "params": _session_params, "json": _to_json(event)})
 	if not _sending and _next_flush_msec < 0:
 		_next_flush_msec = Time.get_ticks_msec() + FLUSH_DELAY
 
@@ -213,14 +216,20 @@ func flush() -> void:
 	if _batch_size <= 0:
 		_batch_size = 1
 		var limit := mini(_queue.size(), MAX_BATCH_SIZE)
-		while _batch_size < limit and _queue[_batch_size]["query"] == _queue[0]["query"]:
+		var first: Dictionary = _queue[0]
+		while (
+			_batch_size < limit
+			and _queue[_batch_size]["query"] == first["query"]
+			and _queue[_batch_size]["params"] == first["params"]
+		):
 			_batch_size += 1
 
 	var events := PackedStringArray()
 	for i in _batch_size:
 		events.append(_queue[i]["json"])
 	var url: String = _endpoint + _queue[0]["query"]
-	var body := "data=" + Marshalls.utf8_to_base64("[" + ",".join(events) + "]").uri_encode()
+	var body: String = _queue[0]["params"] + "&data="
+	body += Marshalls.utf8_to_base64("[" + ",".join(events) + "]").uri_encode()
 	if _debug:
 		print("[OGDLog] Sending %d events to %s" % [_batch_size, url])
 
@@ -281,23 +290,22 @@ func _on_request_completed(
 		_next_flush_msec = Time.get_ticks_msec() + delay
 
 
-func _refresh_query() -> void:
-	_query = "?game_id=" + _app_id.to_upper().uri_encode()
-	_query += "&log_version=" + str(_log_version)
+func _refresh_session_fields() -> void:
+	_query = "?game_id=" + _app_id.to_upper().uri_encode() + "&schema_version=1.0-alpha"
+	_session_params = "log_version=" + str(_log_version)
 	# source_version mirrors game_version: this library only logs events the game itself produced
-	_query += "&game_version=" + _app_version.uri_encode()
-	_query += "&source_version=" + _app_version.uri_encode()
-	_query += "&schema_version=1.0-alpha"
-	_query += "&session_id=" + str(_session_id)
+	_session_params += "&game_version=" + _app_version.uri_encode()
+	_session_params += "&source_version=" + _app_version.uri_encode()
+	_session_params += "&session_id=" + str(_session_id)
 	if not _condition.is_empty():
-		_query += "&condition=" + _condition.uri_encode()
+		_session_params += "&condition=" + _condition.uri_encode()
 	if not _user_id.is_empty():
-		_query += "&player_id=" + _user_id.uri_encode()
+		_session_params += "&player_id=" + _user_id.uri_encode()
 	if not _instance_id.is_empty():
-		_query += "&instance_id=" + _instance_id.uri_encode()
+		_session_params += "&instance_id=" + _instance_id.uri_encode()
 	for field in _session_context:
 		if not _session_context[field].is_empty():
-			_query += "&" + field + "=" + _session_context[field].uri_encode()
+			_session_params += "&" + field + "=" + _session_context[field].uri_encode()
 
 
 func _set_context(field: String, value: Dictionary) -> void:
@@ -306,7 +314,7 @@ func _set_context(field: String, value: Dictionary) -> void:
 
 func _set_session_context(field: String, value: Dictionary) -> void:
 	_session_context[field] = "" if value.is_empty() else _to_json(value)
-	_refresh_query()
+	_refresh_session_fields()
 
 
 func _new_session_id() -> int:

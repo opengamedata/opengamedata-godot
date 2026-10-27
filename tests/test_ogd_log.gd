@@ -26,7 +26,7 @@ func _run() -> void:
 	_test_json()
 	_test_offset()
 	_test_session_and_timestamp()
-	_test_query()
+	_test_session_fields()
 	_test_event()
 	_test_schedule()
 	await _test_upload()
@@ -126,7 +126,7 @@ func _test_session_and_timestamp() -> void:
 	logger.free()
 
 
-func _test_query() -> void:
+func _test_session_fields() -> void:
 	var logger := _new_logger()
 	logger.initialize("wake", "1.2.3 beta/x", 5, "research b")
 	logger.set_user_id("u 1")
@@ -134,16 +134,20 @@ func _test_query() -> void:
 	logger.set_player_history({"sessions": 2})
 	logger.set_game_configuration({"hard_mode": true})
 	var platform: String = logger._session_context["platform"]
+	_check(
+		"only game_id and schema_version in the url",
+		logger._query == "?game_id=WAKE&schema_version=1.0-alpha",
+		logger._query
+	)
 	var expected := (
-		"?game_id=WAKE&log_version=5&game_version=1.2.3%20beta%2Fx&source_version=1.2.3%20beta%2Fx"
-		+ "&schema_version=1.0-alpha&session_id="
+		"log_version=5&game_version=1.2.3%20beta%2Fx&source_version=1.2.3%20beta%2Fx&session_id="
 		+ str(logger.get_session_id())
 		+ "&condition=research%20b&player_id=u%201&instance_id=inst%261"
 		+ "&game_configuration=%7B%22hard_mode%22%3Atrue%7D&platform="
 		+ platform.uri_encode()
 		+ "&player_history=%7B%22sessions%22%3A2%7D"
 	)
-	_check("query string", logger._query == expected, logger._query)
+	_check("session fields", logger._session_params == expected, logger._session_params)
 	_check(
 		"platform has os, device and engine",
 		JSON.parse_string(platform).keys() == ["os", "device", "engine"],
@@ -156,12 +160,12 @@ func _test_query() -> void:
 	_check(
 		"cleared ids and context are left out",
 		(
-			not "player_id" in logger._query
-			and not "instance_id" in logger._query
-			and not "player_history" in logger._query
-			and not "game_configuration" in logger._query
+			not "player_id" in logger._session_params
+			and not "instance_id" in logger._session_params
+			and not "player_history" in logger._session_params
+			and not "game_configuration" in logger._session_params
 		),
-		logger._query
+		logger._session_params
 	)
 	logger.free()
 
@@ -276,13 +280,13 @@ func _test_upload() -> void:
 	)
 	var text: String = JSON.parse_string(events[0]["event_data"])["text"]
 	_check("non-ASCII and control characters arrive intact", text == "Zoë 👋 日本 \v")
-	_check("events keep their session", events[149]["query"]["session_id"] == str(first_session))
+	_check("events keep their session", events[149]["session"]["session_id"] == str(first_session))
 	_check("sequence restarts with the new session", events[150]["session_sequence_index"] == 0)
 	_check(
 		"player id only on events logged after it was set",
-		not events[179]["query"].has("player_id")
+		not events[179]["session"].has("player_id")
 	)
-	_check("player id on later events", events[180]["query"].get("player_id", "") == "p2")
+	_check("player id on later events", events[180]["session"].get("player_id", "") == "p2")
 	logger.free()
 
 

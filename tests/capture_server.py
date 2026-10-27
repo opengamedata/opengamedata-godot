@@ -2,7 +2,8 @@
 
 Run from the repo root: python tests/capture_server.py [port]
 
-- POST /log.php decodes the body the way log.php does, checks the v1.0 fields, and records the events.
+- POST /log.php reads game_id and schema_version from the URL and the other session fields and events from the body,
+  the way log.php does, checks the v1.0 fields, and records the events.
 - GET /stats returns everything received so far as JSON.
 - POST /control?fail=N&status=S makes the next N requests fail with status S. A 3xx redirects to /log.php.
 - POST /reset clears everything.
@@ -19,10 +20,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List
 from urllib.parse import parse_qs, urlsplit
 
-TIMESTAMP     : re.Pattern = re.compile(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}(Z|[+-]\d\d:[0-5]\d)")
-FIELDS        : List[str]  = ["event_name", "session_sequence_index", "timestamp", "event_id", "game_time", "event_data"]
-CONTEXT       : List[str]  = ["game_state", "game_segment"]
-QUERY_CONTEXT : List[str]  = ["game_configuration", "platform", "player_history"]
+TIMESTAMP       : re.Pattern = re.compile(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}(Z|[+-]\d\d:[0-5]\d)")
+FIELDS          : List[str]  = ["event_name", "session_sequence_index", "timestamp", "event_id", "game_time", "event_data"]
+CONTEXT         : List[str]  = ["game_state", "game_segment"]
+SESSION_FIELDS  : List[str]  = ["log_version", "game_version", "source_version", "session_id", "condition", "player_id",
+                                "instance_id", "game_configuration", "platform", "player_history"]
+SESSION_CONTEXT : List[str]  = ["game_configuration", "platform", "player_history"]
 
 _lock  : threading.Lock = threading.Lock()
 _state : Dict[str, Any] = {}
@@ -51,21 +54,26 @@ def _checkRequest(query:Dict[str, List[str]], content_type:str, body:bytes) -> L
     if content_type != "application/x-www-form-urlencoded":
         raise ValueError(f"Content-Type is {content_type!r}")
     params = {key: values[0] for key, values in query.items()}
-    if params.get("schema_version") != "1.0-alpha" or not params.get("game_id") or params["game_id"] != params["game_id"].upper():
+    if list(params.keys()) != ["game_id", "schema_version"]:
+        raise ValueError(f"the URL should only have game_id and schema_version: {params}")
+    if params["schema_version"] != "1.0-alpha" or not params["game_id"] or params["game_id"] != params["game_id"].upper():
         raise ValueError(f"bad schema_version or game_id in {params}")
-    if params.get("game_version") is None or params.get("source_version") != params["game_version"]:
-        raise ValueError("source_version doesn't match game_version")
-    if not re.fullmatch(r"\d{17}", params.get("session_id", "")) or not re.fullmatch(r"\d+", params.get("log_version", "")):
-        raise ValueError(f"bad session_id or log_version in {params}")
-    if "app_branch" in params or "platform" not in params:
-        raise ValueError(f"app_branch sent, or platform missing, in {params}")
-    for key in QUERY_CONTEXT:
-        if key in params and not isinstance(json.loads(params[key], parse_constant=_rejectConstant), dict):
-            raise ValueError(f"{key} isn't a JSON object: {params[key]}")
 
     form = parse_qs(body.decode("ascii"), strict_parsing=True)
-    if list(form.keys()) != ["data"] or len(form["data"]) != 1:
-        raise ValueError("body isn't a single data= field")
+    if any(len(values) != 1 for values in form.values()) or list(form.keys())[-1:] != ["data"]:
+        raise ValueError(f"body isn't the session fields followed by data: {list(form.keys())}")
+    session = {key: values[0] for key, values in form.items() if key != "data"}
+    if list(session.keys()) != [key for key in SESSION_FIELDS if key in session]:
+        raise ValueError(f"unexpected session fields or order: {list(session.keys())}")
+    if session.get("game_version") is None or session.get("source_version") != session["game_version"]:
+        raise ValueError("source_version doesn't match game_version")
+    if not re.fullmatch(r"\d{17}", session.get("session_id", "")) or not re.fullmatch(r"\d+", session.get("log_version", "")):
+        raise ValueError(f"bad session_id or log_version in {session}")
+    if "platform" not in session:
+        raise ValueError(f"platform missing in {session}")
+    for key in SESSION_CONTEXT:
+        if key in session and not isinstance(json.loads(session[key], parse_constant=_rejectConstant), dict):
+            raise ValueError(f"{key} isn't a JSON object: {session[key]}")
     text = base64.b64decode(form["data"][0], validate=True).decode("utf-8")
     events = json.loads(text, parse_constant=_rejectConstant)
 
@@ -88,7 +96,7 @@ def _checkRequest(query:Dict[str, List[str]], content_type:str, body:bytes) -> L
         for key in ["event_data"] + [key for key in CONTEXT if key in event]:
             if not isinstance(json.loads(event[key], parse_constant=_rejectConstant), dict):
                 raise ValueError(f"{key} isn't a JSON object string: {event}")
-        event["query"] = params
+        event["session"] = session
     return events
 
 
@@ -136,7 +144,7 @@ class _Handler(BaseHTTPRequestHandler):
                 _state["errors"].append(str(error))
                 return self._reply(200, f"FAIL: {error}")
             for event in events:
-                key = (event["query"]["session_id"], event["session_sequence_index"])
+                key = (event["session"]["session_id"], event["session_sequence_index"])
                 if key in _state["seen"]:
                     _state["errors"].append(f"duplicate event {key}")
                 _state["seen"].add(key)
