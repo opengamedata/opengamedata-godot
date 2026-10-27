@@ -21,7 +21,7 @@ from urllib.parse import parse_qs, urlsplit
 
 TIMESTAMP     : re.Pattern = re.compile(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}(Z|[+-]\d\d:[0-5]\d)")
 FIELDS        : List[str]  = ["event_name", "session_sequence_index", "timestamp", "event_id", "game_time", "event_data"]
-CONTEXT       : List[str]  = ["game_state", "game_segment", "private_metadata"]
+CONTEXT       : List[str]  = ["game_state", "game_segment"]
 QUERY_CONTEXT : List[str]  = ["game_configuration", "platform", "player_history"]
 
 _lock  : threading.Lock = threading.Lock()

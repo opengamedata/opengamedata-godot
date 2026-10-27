@@ -46,7 +46,6 @@ var _session_context := {
 var _context := {
 	"game_state": "",
 	"game_segment": "",
-	"private_metadata": "",
 }
 
 # each event keeps the query string it was logged with, so a later reset doesn't relabel it
@@ -159,11 +158,6 @@ func set_game_segment(game_segment: Dictionary) -> void:
 ## Sets the game configuration, sent once per request. An empty Dictionary clears it.
 func set_game_configuration(game_configuration: Dictionary) -> void:
 	_set_session_context("game_configuration", game_configuration)
-
-
-## Sets private metadata sent with every event. An empty Dictionary clears it.
-func set_private_metadata(private_metadata: Dictionary) -> void:
-	_set_context("private_metadata", private_metadata)
 
 
 ## Starts a new session, with a new session id, sequence index and game time.

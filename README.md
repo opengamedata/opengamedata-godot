@@ -42,8 +42,8 @@ Event data is a Dictionary, and is sent as JSON.
 
 ### Game State and Other Context
 
-Each of these takes a Dictionary and is sent until it changes, and an empty Dictionary clears it. Game state, game
-segment and private metadata are attached to every event. Player history and game configuration shouldn't change
+Each of these takes a Dictionary and is sent until it changes, and an empty Dictionary clears it. Game state and game
+segment are attached to every event. Player history and game configuration shouldn't change
 during a session, so they're sent once per request, along with the platform (OS, device and Godot version), instead
 of with each event. They go in the URL, so keep them small.
 
@@ -52,7 +52,6 @@ OGDLog.set_game_state({"money": 120})
 OGDLog.set_game_segment({"level": "reef-3"})
 OGDLog.set_player_history({"games_played": 4})
 OGDLog.set_game_configuration({"difficulty": "hard"})
-OGDLog.set_private_metadata({"classroom": "7b"})
 ```
 
 ### Sessions and Players

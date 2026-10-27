@@ -173,7 +173,6 @@ func _test_event() -> void:
 
 	logger.initialize("wake", "1.0")
 	# set in a different order than they're sent in
-	logger.set_private_metadata({"class": "b"})
 	logger.set_game_configuration({"hard_mode": true})
 	logger.set_game_segment({"level": "reef-3"})
 	logger.set_game_state({"money": 5})
@@ -186,7 +185,6 @@ func _test_event() -> void:
 	var expected_context := {
 		"game_state": '{"money":5}',
 		"game_segment": '{"level":"reef-3"}',
-		"private_metadata": '{"class":"b"}',
 	}
 	var fields := EVENT_FIELDS + expected_context.keys()
 	_check("fields in Unity's order", first.keys() == fields, str(first.keys()))
