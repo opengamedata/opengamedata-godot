@@ -18,12 +18,13 @@ Requires Godot 4.3 or newer. GDScript only, so it works in every export, includi
 Call `initialize` once, before logging any events:
 
 ```gdscript
-OGDLog.initialize("MY_GAME", "1.2.0")
+OGDLog.initialize("MY_GAME", "1.2.0", "1.0")
 ```
 
 - `app_id`: the game's id in the database (ex. "AQUALAB")
 - `app_version`: the current version of the game
-- `log_version` (optional): the version of the game's logging, as an int. Defaults to 0.
+- `log_version`: the version of the game's events, such as "1.0". Raise it when the game adds, removes or changes
+  events, separately from `app_version`.
 - `condition` (optional): the experimental condition this copy of the game is in, such as an A/B test group, or the
   branch for games running more than one version at once
 

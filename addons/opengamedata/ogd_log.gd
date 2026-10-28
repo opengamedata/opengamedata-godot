@@ -26,7 +26,7 @@ static var _control_characters := RegEx.create_from_string("[\\x01-\\x1f]")
 
 var _app_id := ""
 var _app_version := ""
-var _log_version := 0
+var _log_version := ""
 var _condition := ""
 var _endpoint := DEFAULT_ENDPOINT
 var _debug := false
@@ -110,8 +110,8 @@ func _notification(what: int) -> void:
 		_request_deadline_msec = 0
 
 
-## Sets the game's id and version. Call this once before logging any events.
-func initialize(app_id: String, app_version: String, log_version := 0, condition := "") -> void:
+## Sets the game's id and versions. Call this once before logging any events.
+func initialize(app_id: String, app_version: String, log_version: String, condition := "") -> void:
 	_app_id = app_id
 	_app_version = app_version
 	_log_version = log_version
@@ -292,7 +292,7 @@ func _on_request_completed(
 
 func _refresh_session_fields() -> void:
 	_query = "?game_id=" + _app_id.to_upper().uri_encode() + "&schema_version=1.0-alpha"
-	_session_params = "log_version=" + str(_log_version)
+	_session_params = "log_version=" + _log_version.uri_encode()
 	# source_version mirrors game_version: this library only logs events the game itself produced
 	_session_params += "&game_version=" + _app_version.uri_encode()
 	_session_params += "&source_version=" + _app_version.uri_encode()

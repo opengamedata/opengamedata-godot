@@ -67,7 +67,7 @@ def _checkRequest(query:Dict[str, List[str]], content_type:str, body:bytes) -> L
         raise ValueError(f"unexpected session fields or order: {list(session.keys())}")
     if session.get("game_version") is None or session.get("source_version") != session["game_version"]:
         raise ValueError("source_version doesn't match game_version")
-    if not re.fullmatch(r"\d{17}", session.get("session_id", "")) or not re.fullmatch(r"\d+", session.get("log_version", "")):
+    if not re.fullmatch(r"\d{17}", session.get("session_id", "")) or not re.fullmatch(r"[A-Za-z0-9.-]+", session.get("log_version", "")):
         raise ValueError(f"bad session_id or log_version in {session}")
     if "platform" not in session:
         raise ValueError(f"platform missing in {session}")

@@ -128,7 +128,7 @@ func _test_session_and_timestamp() -> void:
 
 func _test_session_fields() -> void:
 	var logger := _new_logger()
-	logger.initialize("wake", "1.2.3 beta/x", 5, "research b")
+	logger.initialize("wake", "1.2.3 beta/x", "5.0 b&c", "research b")
 	logger.set_user_id("u 1")
 	logger.set_instance_id("inst&1")
 	logger.set_player_history({"sessions": 2})
@@ -140,7 +140,8 @@ func _test_session_fields() -> void:
 		logger._query
 	)
 	var expected := (
-		"log_version=5&game_version=1.2.3%20beta%2Fx&source_version=1.2.3%20beta%2Fx&session_id="
+		"log_version=5.0%20b%26c&game_version=1.2.3%20beta%2Fx"
+		+ "&source_version=1.2.3%20beta%2Fx&session_id="
 		+ str(logger.get_session_id())
 		+ "&condition=research%20b&player_id=u%201&instance_id=inst%261"
 		+ "&game_configuration=%7B%22hard_mode%22%3Atrue%7D&platform="
@@ -175,7 +176,7 @@ func _test_event() -> void:
 	logger.log("too_early")
 	_check("events logged before initialize are dropped", logger._queue.is_empty())
 
-	logger.initialize("wake", "1.0")
+	logger.initialize("wake", "1.0", "1.0")
 	# set in a different order than they're sent in
 	logger.set_game_configuration({"hard_mode": true})
 	logger.set_game_segment({"level": "reef-3"})
@@ -220,7 +221,7 @@ func _test_event() -> void:
 func _test_schedule() -> void:
 	var logger := _new_logger()
 	logger.set_endpoint("http://127.0.0.1:9/log.php")
-	logger.initialize("wake", "1.0")
+	logger.initialize("wake", "1.0", "1.0")
 	logger.log("first")
 	var wait: int = logger._next_flush_msec - Time.get_ticks_msec()
 	_check("the first event waits 0.2s", wait > 150 and wait <= 200, str(wait))
@@ -245,7 +246,7 @@ func _test_schedule() -> void:
 	for event in notifications:
 		logger = _new_logger()
 		logger.set_endpoint("http://127.0.0.1:9/log.php")
-		logger.initialize("wake", "1.0")
+		logger.initialize("wake", "1.0", "1.0")
 		logger.log("first")
 		logger.notification(notifications[event])
 		_check(event + " sends right away", logger._sending)
@@ -256,7 +257,7 @@ func _test_upload() -> void:
 	await _server("/reset")
 	var logger := _new_logger()
 	logger.set_endpoint(SERVER + "/log.php")
-	logger.initialize("wake", "1.0")
+	logger.initialize("wake", "1.0", "1.0")
 	for i in 150:
 		logger.log("event_%d" % i, {"text": "Zoë 👋 日本 \v" if i == 0 else "plain"})
 	var first_session: int = logger.get_session_id()
@@ -296,7 +297,7 @@ func _test_retry() -> void:
 	var logger := _new_logger()
 	var delays := _record_delays(logger)
 	logger.set_endpoint(SERVER + "/log.php")
-	logger.initialize("wake", "1.0")
+	logger.initialize("wake", "1.0", "1.0")
 	for i in 3:
 		logger.log("retry_%d" % i)
 	while logger._failure_count == 0 and not logger._queue.is_empty():
@@ -329,7 +330,7 @@ func _test_paused() -> void:
 	await _server("/reset")
 	var logger := _new_logger()
 	logger.set_endpoint(SERVER + "/log.php")
-	logger.initialize("wake", "1.0")
+	logger.initialize("wake", "1.0", "1.0")
 	paused = true
 	logger.log("paused")
 	var sent: bool = await _sent(logger)
@@ -344,7 +345,7 @@ func _test_redirect() -> void:
 		await _server("/control?fail=1&status=%d" % status)
 		var logger := _new_logger()
 		logger.set_endpoint(SERVER + "/log.php")
-		logger.initialize("wake", "1.0")
+		logger.initialize("wake", "1.0", "1.0")
 		logger.log("redirected")
 		_check("sent after a %d" % status, await _sent(logger))
 		var sizes := _sizes(await _stats())
@@ -358,7 +359,7 @@ func _test_rejected() -> void:
 		await _server("/control?fail=1&status=%d" % status)
 		var logger := _new_logger()
 		logger.set_endpoint(SERVER + "/log.php")
-		logger.initialize("wake", "1.0")
+		logger.initialize("wake", "1.0", "1.0")
 		logger.log("rejected")
 		await _sent(logger)
 		var stats := await _stats()
@@ -383,7 +384,7 @@ func _test_offline() -> void:
 	var logger := _new_logger()
 	var delays := _record_delays(logger)
 	logger.set_endpoint("http://127.0.0.1:9/log.php")
-	logger.initialize("wake", "1.0")
+	logger.initialize("wake", "1.0", "1.0")
 	logger.log("offline")
 	await create_timer(1.5).timeout
 	_check(
@@ -406,7 +407,7 @@ func _test_no_answer() -> void:
 	silent.listen(8766, "127.0.0.1")
 	var logger := _new_logger()
 	logger.set_endpoint("http://127.0.0.1:8766/log.php")
-	logger.initialize("wake", "1.0")
+	logger.initialize("wake", "1.0", "1.0")
 	logger.log("no_answer")
 	logger.flush()
 	var timeout: int = logger._request_deadline_msec - Time.get_ticks_msec()
@@ -449,7 +450,7 @@ func _test_leave_tree() -> void:
 	await _server("/reset")
 	var logger := _new_logger()
 	logger.set_endpoint(SERVER + "/log.php")
-	logger.initialize("wake", "1.0")
+	logger.initialize("wake", "1.0", "1.0")
 	logger.log("moved")
 	logger.flush()
 	root.remove_child(logger)
@@ -479,7 +480,7 @@ func _test_stall() -> void:
 	await _server("/reset")
 	var logger := _new_logger()
 	logger.set_endpoint(SERVER + "/log.php")
-	logger.initialize("wake", "1.0")
+	logger.initialize("wake", "1.0", "1.0")
 	logger.log("stalled")
 	logger.flush()
 	var frames := 0
@@ -504,7 +505,7 @@ func _test_stall() -> void:
 func _test_bad_endpoint() -> void:
 	var logger := _new_logger()
 	logger.set_endpoint("ftp://example.org/log.php")
-	logger.initialize("wake", "1.0")
+	logger.initialize("wake", "1.0", "1.0")
 	logger.log("bad_endpoint")
 	await create_timer(0.5).timeout
 	_check("a bad URL counts as a failure", logger._failure_count > 0 and logger._queue.size() == 1)
