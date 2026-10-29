@@ -1,0 +1,55 @@
+# Workflow to lint the logger and run its tests on the oldest and newest supported Godot versions.
+name: OGD Godot Logger - CI Script
+run-name: ${{ format('{0} - {1}', github.workflow, github.event_name == 'push' && github.event.head_commit.message || github.event.pull_request.title) }}
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint GDScript
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7.0.1
+    - uses: actions/setup-python@v7.0.0
+      with:
+        python-version: '3.12'
+    - name: Install gdtoolkit
+      run: pip install "gdtoolkit==4.5.*"
+    - name: Lint and check formatting
+      run: |
+        gdlint addons example tests
+        gdformat --check addons example tests
+
+  test:
+    name: Test on Godot ${{ matrix.godot }}
+    runs-on: ubuntu-latest
+    # in case a failing test leaves an await that never resolves
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        godot: ['4.3.0', '4.7.2']
+    steps:
+    - uses: actions/checkout@v7.0.1
+    - uses: actions/setup-python@v7.0.0
+      with:
+        python-version: '3.12'
+    - uses: chickensoft-games/setup-godot@v2.4.2
+      with:
+        version: ${{ matrix.godot }}
+        use-dotnet: false
+    - name: Start the capture server
+      run: python tests/capture_server.py 8765 &
+    - name: Import the project
+      run: godot --headless --path . --import
+    - name: Run the tests
+      # a script error doesn't fail the run, so check the log as well as the exit code
+      # Marquesas is -09:30, where Time.get_time_zone_from_system() gets the offset wrong
+      env:
+        TZ: Pacific/Marquesas
+      shell: bash
+      run: |
+        godot --headless --path . -s tests/test_ogd_log.gd 2>&1 | tee test.log
+        grep -q "all tests passed" test.log
+        if grep -q "SCRIPT ERROR" test.log; then exit 1; fi
