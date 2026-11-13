@@ -39,6 +39,7 @@ func _run() -> void:
 	await _test_leave_tree()
 	await _test_stall()
 	await _test_bad_endpoint()
+	await _test_echo()
 	print("all tests passed" if _failed == 0 else "%d tests failed" % _failed)
 	quit(1 if _failed > 0 else 0)
 
@@ -509,6 +510,28 @@ func _test_bad_endpoint() -> void:
 	logger.log("bad_endpoint")
 	await create_timer(0.5).timeout
 	_check("a bad URL counts as a failure", logger._failure_count > 0 and logger._queue.size() == 1)
+	logger.free()
+
+
+func _test_echo() -> void:
+	await _server("/reset")
+	var logger := _new_logger()
+	logger.set_endpoint(SERVER + "/log.php")
+	logger.set_echo(true)
+	logger.initialize("wake", "1.0", "1.0")
+	logger.log("echoed")
+	_check("echo sent", await _sent(logger))
+	logger.set_echo(false)
+	logger.log("logged")
+	_check("log sent", await _sent(logger))
+	var paths := []
+	for request in (await _stats())["requests"]:
+		paths.append(request["path"])
+	_check(
+		"set_echo switches between echo.php and log.php",
+		paths == ["/echo.php", "/log.php"],
+		str(paths)
+	)
 	logger.free()
 
 

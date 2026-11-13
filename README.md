@@ -85,6 +85,10 @@ OGDLog.set_endpoint("https://t-main-t---ogd-api-logger-test-3rlcoyes6a-uc.a.run.
 Use the endpoint's final URL. The logger doesn't follow redirects, and in web exports, where the browser follows them
 instead, a redirect can turn the upload into a GET without its data.
 
+To check how your events are read without storing them, call `OGDLog.set_echo(true)`. Events then go to `echo.php`
+next to the endpoint, which answers with each event as `log.php` would read it, and the answer is printed when debug is
+on. `echo.php` is only on the testing endpoint for now.
+
 ## Platform Notes
 
 - **Android:** enable the Internet permission in the export preset.
