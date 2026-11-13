@@ -3,7 +3,8 @@
 Run from the repo root: python tests/capture_server.py [port]
 
 - POST /log.php reads game_id and schema_version from the URL and the other session fields and events from the body,
-  the way log.php does, checks the v1.0 fields, and records the events.
+  the way log.php does, checks the v1.0 fields, and records the events. Any other path, like /echo.php, is read the
+  same way, and each request records its path.
 - GET /stats returns everything received so far as JSON.
 - POST /control?fail=N&status=S makes the next N requests fail with status S. A 3xx redirects to /log.php.
 - POST /reset clears everything.
@@ -132,7 +133,7 @@ class _Handler(BaseHTTPRequestHandler):
                 _state["fail_status"] = int(params.get("status", ["500"])[0])
                 return self._reply(200, "OK")
 
-            request = {"time": time.monotonic(), "size": 0, "status": 200}
+            request = {"time": time.monotonic(), "size": 0, "status": 200, "path": url.path}
             _state["requests"].append(request)
             if _state["fail"] > 0:
                 _state["fail"] -= 1
