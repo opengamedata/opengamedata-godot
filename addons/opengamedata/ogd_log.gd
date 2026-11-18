@@ -30,6 +30,7 @@ var _log_version := ""
 var _condition := ""
 var _endpoint := DEFAULT_ENDPOINT
 var _debug := false
+var _echo := false
 
 var _session_id := 0
 var _session_start_usec := 0
@@ -130,6 +131,12 @@ func set_debug(enabled: bool) -> void:
 	_debug = enabled
 
 
+## Sends events to the echo.php next to the endpoint, which answers with how each event was read
+## instead of storing it. Turn on debug to see the answer.
+func set_echo(enabled: bool) -> void:
+	_echo = enabled
+
+
 ## Sets the player id sent with every event. An empty string clears it.
 func set_user_id(user_id: String) -> void:
 	_user_id = user_id
@@ -227,7 +234,10 @@ func flush() -> void:
 	var events := PackedStringArray()
 	for i in _batch_size:
 		events.append(_queue[i]["json"])
-	var url: String = _endpoint + _queue[0]["query"]
+	var url := _endpoint
+	if _echo:
+		url = url.substr(0, url.rfind("/") + 1) + "echo.php"
+	url += _queue[0]["query"]
 	var body: String = _queue[0]["params"] + "&data="
 	body += Marshalls.utf8_to_base64("[" + ",".join(events) + "]").uri_encode()
 	if _debug:
